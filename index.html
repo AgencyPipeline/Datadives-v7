@@ -416,6 +416,13 @@ summary{font-size:17px}
 /* fix: anchor jumps land on the form, below the sticky header */
 #leadForm,#book,#quickForm{scroll-margin-top:90px}
 </style>
+<!-- Meta Pixel: datdives H-P (1778690219910785) -->
+<script>
+!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');
+fbq('init','1778690219910785');
+fbq('track','PageView');
+</script>
+<noscript><img height="1" width="1" style="display:none" alt="" src="https://www.facebook.com/tr?id=1778690219910785&ev=PageView&noscript=1"></noscript>
 </head>
 <body>
 
@@ -664,60 +671,72 @@ summary{font-size:17px}
 <div class="mcta" id="mcta"><a class="btn btn-violet" href="#leadForm">Book a free data review</a></div>
 
 <script>
-// Paste your Zoho CRM web-to-lead URL here to send leads straight to Zoho.
-// Left empty, the form opens a pre-filled email to contactus@datadives.in.
-const FORM_ENDPOINT = "";
+// Google Apps Script web app: saves leads to the Google Sheet and sends the server-side (CAPI) Lead.
+const FORM_ENDPOINT = "https://script.google.com/macros/s/AKfycbw2FaKz6V-Gj2wWfq6QDF96wmAwup2Kup28-KlHVCT7CERxGM4iK3Nn2BTnI1L3MP6z/exec";
 
 (function () {
   const form = document.getElementById('leadForm');
   const msg = document.getElementById('formMsg');
   const quick = document.getElementById('quickForm');
   const qmsg = document.getElementById('quickMsg');
-  const utm = ['utm_source','utm_medium','utm_campaign','utm_term','utm_content','gclid','fbclid'];
-  try { const p = new URLSearchParams(location.search); utm.forEach(k => { const v = p.get(k); if (v) form.elements[k].value = v; }); } catch (e) {}
-  const show = (type, html) => { msg.className = 'msg ' + type; msg.innerHTML = html; };
-  const track = (n) => { try { if (window.fbq) fbq('trackCustom', n); if (window.gtag) gtag('event', n); } catch (e) {} };
-  const okEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+  const utmKeys = ['utm_source','utm_medium','utm_campaign','utm_term','utm_content','gclid','fbclid'];
+  const params = new URLSearchParams(location.search);
+  utmKeys.forEach(k => { const v = params.get(k); if (v && form.elements[k]) form.elements[k].value = v; });
 
-  quick.addEventListener('submit', async (ev) => {
+  const show = (type, html) => { msg.className = 'msg ' + type; msg.innerHTML = html; };
+  const okEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+  const cookie = (n) => (document.cookie.match('(?:^|; )' + n + '=([^;]*)') || [])[1] || '';
+  const newId = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now() + '-' + Math.random().toString(36).slice(2));
+  const fbc = () => cookie('_fbc') || (params.get('fbclid') ? 'fb.1.' + Date.now() + '.' + params.get('fbclid') : '');
+
+  // send to the sheet; survives the visitor closing the page
+  function send(data) {
+    const body = new URLSearchParams(data);
+    let queued = false;
+    try { queued = navigator.sendBeacon && navigator.sendBeacon(FORM_ENDPOINT, body); } catch (e) {}
+    if (!queued) { try { fetch(FORM_ENDPOINT, { method: 'POST', body, mode: 'no-cors', keepalive: true }); queued = true; } catch (e) {} }
+    return queued;
+  }
+  function base(step) {
+    const d = { step, page: 'founder-led-data-engineering', page_url: location.href.split('#')[0], ua: navigator.userAgent, fbp: cookie('_fbp'), fbc: fbc(), event_id: newId() };
+    utmKeys.forEach(k => d[k] = form.elements[k] ? form.elements[k].value : '');
+    return d;
+  }
+
+  // hero: capture the email straight away, then hand over to the full form
+  quick.addEventListener('submit', (ev) => {
     ev.preventDefault();
     const email = quick.email.value.trim();
     if (!okEmail(email)) { qmsg.classList.add('err'); qmsg.textContent = 'Enter your work email so we can reply.'; quick.email.focus(); return; }
-    track('QuickLead');
-    if (FORM_ENDPOINT) {
-      const fd = new FormData(); fd.append('email', email); fd.append('page', 'founders-on-your-backlog'); fd.append('step', 'quick');
-      utm.forEach(k => fd.append(k, form.elements[k].value));
-      try { await fetch(FORM_ENDPOINT, { method: 'POST', body: fd, mode: 'no-cors' }); } catch (e) {}
-    }
+    const d = base('quick'); d.email = email;
+    send(d);
+    if (window.fbq) fbq('trackCustom', 'EmailCaptured', {}, { eventID: d.event_id });
     form.email.value = email;
     show('ok', 'Got your email. Add your name and company, and Sourabh or Sushma will reply within one business day.');
-    document.getElementById('leadForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    form.scrollIntoView({ behavior: 'smooth', block: 'start' });
     setTimeout(() => form.elements['name'].focus({ preventScroll: true }), 600);
   });
 
   let started = false;
-  form.addEventListener('focusin', () => { if (!started) { started = true; track('FormStart'); } });
-  form.addEventListener('submit', async (ev) => {
+  form.addEventListener('focusin', () => { if (!started) { started = true; if (window.fbq) fbq('trackCustom', 'FormStart'); } });
+
+  form.addEventListener('submit', (ev) => {
     ev.preventDefault();
     const intent = form.intent.value;
-    if (intent === 'job') return show('info', 'Thanks for your interest. Open roles are on our <a href="https://www.datadives.in/careers">careers page</a>.');
-    if (intent === 'learn') return show('info', 'Take a look at <a href="https://www.datadives.in/academy">Datadives Academy</a> for our data engineering programmes.');
     const name = form.elements['name'].value.trim(), email = form.email.value.trim(), company = form.company.value.trim();
-    if (!name || !company || !okEmail(email)) return show('info', 'Add your name, a valid work email and your company to book the call.');
-    if (FORM_ENDPOINT) {
-      try {
-        await fetch(FORM_ENDPOINT, { method: 'POST', body: new FormData(form), mode: 'no-cors' });
-        show('ok', 'Thanks, ' + name.split(' ')[0] + '. Sourabh or Sushma will reply within one business day to set up the call.');
-        form.reset();
-        if (window.fbq) fbq('track', 'Lead');
-        if (window.gtag) gtag('event', 'generate_lead');
-      } catch (e) { show('info', 'That didn\'t go through. Email us at <a href="mailto:contactus@datadives.in">contactus@datadives.in</a>.'); }
-      return;
-    }
-    const data = Object.fromEntries(new FormData(form).entries());
-    const body = Object.entries(data).filter(([, v]) => v).map(([k, v]) => k + ': ' + v).join('\n');
-    location.href = 'mailto:contactus@datadives.in?subject=' + encodeURIComponent('Call with the founders: ' + company) + '&body=' + encodeURIComponent(body);
-    show('ok', 'Your email app should open with your details filled in. Press send and we\'ll reply within one business day.');
+    if (!name || !company || !okEmail(email)) return show('info', 'Add your name, a valid work email and your company to book the review.');
+    const d = base('full');
+    Object.assign(d, { name, email, company, role: form.role.value.trim(), message: form.message.value.trim(), intent });
+    const btn = form.querySelector('button[type=submit]'); btn.disabled = true;
+    const queued = send(d);
+    if (intent === 'job') { btn.disabled = false; return show('info', 'Thanks for your interest. Open roles are on our <a href="https://www.datadives.in/careers">careers page</a>.'); }
+    if (intent === 'learn') { btn.disabled = false; return show('info', 'Take a look at <a href="https://www.datadives.in/academy">Datadives Academy</a> for our data engineering programmes.'); }
+    if (!queued) { btn.disabled = false; return show('info', 'That didn\'t go through. Email us at <a href="mailto:contactus@datadives.in">contactus@datadives.in</a>.'); }
+    // browser Lead uses the same event ID as the server-side Lead, so Meta counts it once
+    if (window.fbq) fbq('track', 'Lead', { content_name: 'Founder-led data engineering', content_category: 'data_engineering' }, { eventID: d.event_id });
+    if (window.gtag) gtag('event', 'generate_lead');
+    show('ok', 'Thanks, ' + name.split(' ')[0] + '. Sourabh or Sushma will reply within one business day to set up your free data review.');
+    form.reset(); btn.disabled = false;
   });
 
   const mcta = document.getElementById('mcta');
