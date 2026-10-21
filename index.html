@@ -415,6 +415,7 @@ summary{font-size:17px}
 .portrait figcaption span:last-child{color:var(--ink-2)}
 /* fix: anchor jumps land on the form, below the sticky header */
 #leadForm,#book,#quickForm{scroll-margin-top:90px}
+.hp{position:absolute!important;left:-9999px!important;width:1px;height:1px;overflow:hidden}
 </style>
 <!-- Meta Pixel: datdives H-P (1778690219910785) -->
 <script>
@@ -651,6 +652,7 @@ fbq('track','PageView');
       <div class="f full"><label for="msg">What's your most pressing data problem?</label><textarea id="msg" name="message" placeholder="e.g. Moving Airflow jobs to Databricks; nightly pipeline keeps failing."></textarea></div>
       <div class="f full"><label for="intent">This is about</label><select id="intent" name="intent"><option value="work">Data work for my team</option><option value="job">A job at Datadives</option><option value="learn">Learning data engineering</option></select></div>
       <input type="hidden" name="utm_source"><input type="hidden" name="utm_medium"><input type="hidden" name="utm_campaign"><input type="hidden" name="utm_term"><input type="hidden" name="utm_content"><input type="hidden" name="gclid"><input type="hidden" name="fbclid"><input type="hidden" name="page" value="founders-on-your-backlog">
+      <div class="hp" aria-hidden="true"><label for="website">Website</label><input id="website" name="website" tabindex="-1" autocomplete="off"></div>
       <div class="msg" id="formMsg" role="status" aria-live="polite"></div>
       <button class="btn btn-violet" type="submit">Book my free data review</button>
       <p class="fine">Free, no obligation. We use your details only to reply.</p>
@@ -717,8 +719,8 @@ const FORM_ENDPOINT = "https://script.google.com/macros/s/AKfycbw2FaKz6V-Gj2wWfq
     setTimeout(() => form.elements['name'].focus({ preventScroll: true }), 600);
   });
 
-  let started = false;
-  form.addEventListener('focusin', () => { if (!started) { started = true; if (window.fbq) fbq('trackCustom', 'FormStart'); } });
+  let started = false, startedAt = 0;
+  form.addEventListener('focusin', () => { if (!started) { started = true; startedAt = Date.now(); if (window.fbq) fbq('trackCustom', 'FormStart'); } });
 
   form.addEventListener('submit', (ev) => {
     ev.preventDefault();
@@ -726,12 +728,14 @@ const FORM_ENDPOINT = "https://script.google.com/macros/s/AKfycbw2FaKz6V-Gj2wWfq
     const name = form.elements['name'].value.trim(), email = form.email.value.trim(), company = form.company.value.trim();
     if (!name || !company || !okEmail(email)) return show('info', 'Add your name, a valid work email and your company to book the review.');
     const d = base('full');
-    Object.assign(d, { name, email, company, role: form.role.value.trim(), message: form.message.value.trim(), intent });
+    Object.assign(d, { name, email, company, role: form.role.value.trim(), message: form.message.value.trim(), intent, website: form.website.value, fill_ms: startedAt ? Date.now() - startedAt : '' });
+    const isBot = !!form.website.value;
     const btn = form.querySelector('button[type=submit]'); btn.disabled = true;
     const queued = send(d);
     if (intent === 'job') { btn.disabled = false; return show('info', 'Thanks for your interest. Open roles are on our <a href="https://www.datadives.in/careers">careers page</a>.'); }
     if (intent === 'learn') { btn.disabled = false; return show('info', 'Take a look at <a href="https://www.datadives.in/academy">Datadives Academy</a> for our data engineering programmes.'); }
     if (!queued) { btn.disabled = false; return show('info', 'That didn\'t go through. Email us at <a href="mailto:contactus@datadives.in">contactus@datadives.in</a>.'); }
+    if (isBot) { show('ok', 'Thanks. We will be in touch.'); form.reset(); btn.disabled = false; return; }
     // browser Lead uses the same event ID as the server-side Lead, so Meta counts it once
     if (window.fbq) fbq('track', 'Lead', { content_name: 'Founder-led data engineering', content_category: 'data_engineering' }, { eventID: d.event_id });
     if (window.gtag) gtag('event', 'generate_lead');
